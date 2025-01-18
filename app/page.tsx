@@ -326,36 +326,6 @@ export default function Home() {
     setIsDrawing(false);
   };
 
-  // const delay = (ms: number) =>
-  //   new Promise((resolve) => setTimeout(resolve, ms));
-
-  // const simulateApiCall = async (
-  //   prompt: string,
-  //   type: string,
-  //   delayMs: number
-  // ) => {
-  //   await delay(delayMs);
-
-  //   if (type === "image")
-  //     return {
-  //       data: {
-  //         images: [
-  //           {
-  //             url: "https://fal.media/files/monkey/wMltTLnuYCWxLsT4HGWVq_595297b64fa545d888044fcbcf30548e.jpg",
-  //           },
-  //         ],
-  //       },
-  //     };
-
-  //   return {
-  //     data: {
-  //       video: {
-  //         url: "https://v3.fal.media/files/koala/ch6n2Oa10EWr-2ANV5lYW_output.mp4",
-  //       },
-  //     },
-  //   };
-  // };
-
   const handleGenerate = async () => {
     setIsGeneratingImage(true);
 
@@ -375,8 +345,6 @@ export default function Home() {
           console.log("queue update", update);
         },
       });
-
-      // const result = await simulateApiCall(prompt, "image", 4000);
 
       setGeneratedImage({ url: result?.data.images[0].url, prompt });
       handleGenerateVideo(result?.data.images[0].url);
@@ -409,10 +377,8 @@ export default function Home() {
           },
         }
       );
-      // const result = await simulateApiCall(prompt, "video", 3000);
 
       setVideoGenerated({ url: result.data.video.url, prompt });
-      // setIsBlurOverlayVisible(false);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
