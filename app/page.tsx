@@ -19,10 +19,6 @@ import {
 } from "@/lib/canvas";
 import { useImageUpload } from "@/hooks/useImageUpload";
 
-fal.config({
-  proxyUrl: "/api/fal/proxy",
-});
-
 export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentColor, setCurrentColor] = useState("#9ab052");
@@ -112,7 +108,28 @@ export default function Home() {
     drawDottedBackground(ctx, width, height);
   }, []);
 
+  const hasCanvasContent = () => {
+    const drawingLayer = drawingLayerRef.current;
+    if (!drawingLayer) return false;
+
+    const ctx = drawingLayer.getContext("2d");
+    if (!ctx) return false;
+
+    const imageData = ctx.getImageData(
+      0,
+      0,
+      drawingLayer.width,
+      drawingLayer.height
+    ).data;
+    return imageData.some((pixel) => pixel !== 0);
+  };
+
   const handleGenerate = async () => {
+    if (!hasCanvasContent()) {
+      alert("Please draw something first!");
+      return;
+    }
+
     setIsGeneratingImage(true);
 
     const controlImage = getDataUrlFromCanvas(
@@ -142,6 +159,7 @@ export default function Home() {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
       console.error("Error generating image:", errorMessage);
+      alert("Error generating image: " + errorMessage);
     }
   };
 
@@ -173,6 +191,7 @@ export default function Home() {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
       console.error("Error generating video:", errorMessage);
+      alert("Error generating video: " + errorMessage);
     } finally {
       setIsGeneratingVideo(false);
       setIsGeneratingImage(false);
@@ -180,7 +199,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4">
+    <div className="min-h-[calc(80vh-4rem)] flex items-center justify-center p-4">
       <div
         className={`bg-white rounded-3xl shadow-lg w-full max-w-md overflow-hidden relative ${
           generatedImage ? "h-[550px]" : ""
@@ -306,6 +325,9 @@ export default function Home() {
               className="text-gray-700 hover:bg-gray-100 rounded-full p-2 border-2 border-gray-300 bg-white"
               onClick={() => {
                 clearCanvas(canvasRef.current, drawingLayerRef.current);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = "";
+                }
               }}
             >
               <X className="w-5 h-5" />
