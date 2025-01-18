@@ -11,6 +11,13 @@ import {
   slideUpVariants,
   colors,
 } from "@/lib/constants";
+import { useCanvas } from "@/hooks/useCanvas";
+import {
+  clearCanvas,
+  drawDottedBackground,
+  getDataUrlFromCanvas,
+} from "@/lib/canvas";
+import { useImageUpload } from "@/hooks/useImageUpload";
 
 fal.config({
   proxyUrl: "/api/fal/proxy",
@@ -18,74 +25,16 @@ fal.config({
 
 export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isDrawing, setIsDrawing] = useState(false);
   const [currentColor, setCurrentColor] = useState("#9ab052");
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
-  const drawingLayerRef = useRef<HTMLCanvasElement | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [prompt, setPrompt] = useState("NICOLE BEAR");
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadedImage, setUploadedImage] = useState<HTMLImageElement | null>(
-    null
-  );
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-
-        // Store uploaded image for later use
-        setUploadedImage(img);
-
-        // Set canvas dimensions and draw image
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
-
-        // Calculate dimensions
-        const aspectRatio = img.width / img.height;
-        let drawWidth = canvas.width;
-        let drawHeight = canvas.height;
-
-        if (aspectRatio > 1) {
-          drawHeight = drawWidth / aspectRatio;
-        } else {
-          drawWidth = drawHeight * aspectRatio;
-        }
-
-        const x = (canvas.width - drawWidth) / 2;
-        const y = (canvas.height - drawHeight) / 2;
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, x, y, drawWidth, drawHeight);
-
-        // Also draw on drawing layer
-        const drawingLayer = drawingLayerRef.current;
-        if (drawingLayer) {
-          drawingLayer.width = canvas.width;
-          drawingLayer.height = canvas.height;
-          const drawingCtx = drawingLayer.getContext("2d");
-          if (drawingCtx) {
-            drawingCtx.drawImage(img, x, y, drawWidth, drawHeight);
-          }
-        }
-      };
-      img.src = e.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  };
+  const { canvasRef, drawingLayerRef, startDrawing, draw, stopDrawing } =
+    useCanvas({ currentColor });
 
   const [generatedImage, setGeneratedImage] = useState<{
     url: string;
@@ -99,7 +48,10 @@ export default function Home() {
   } | null>(null);
 
   const [isBlurOverlayVisible, setIsBlurOverlayVisible] = useState(true);
-
+  const { fileInputRef, handleImageUpload, triggerFileInput } = useImageUpload({
+    canvasRef,
+    drawingLayerRef,
+  });
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -119,115 +71,6 @@ export default function Home() {
       contextRef.current.strokeStyle = color;
     }
     setIsMenuOpen(false);
-  };
-
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    const drawingLayer = drawingLayerRef.current;
-    if (!canvas || !drawingLayer) return;
-
-    const ctx = canvas.getContext("2d");
-    const drawingCtx = drawingLayer.getContext("2d");
-    if (!ctx || !drawingCtx) return;
-
-    // Clear the drawing layer
-    drawingCtx.clearRect(0, 0, drawingLayer.width, drawingLayer.height);
-
-    // Redraw the background on the main canvas
-    const { width, height } = canvas.getBoundingClientRect();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawDottedBackground(ctx, width, height);
-  };
-
-  const drawDottedBackground = (
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number
-  ) => {
-    // Clear background
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
-
-    const spacing = 15;
-    const smudgeWidth = 2;
-    const smudgeHeight = 1;
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const maxDistance = Math.sqrt(
-      Math.pow(width / 2, 2) + Math.pow(height / 2, 2)
-    );
-
-    // Set blur effect
-    ctx.filter = "blur(2px)";
-
-    // Draw smudged dots
-    for (let x = spacing; x < width; x += spacing) {
-      for (let y = spacing; y < height; y += spacing) {
-        const distanceFromCenter = Math.sqrt(
-          Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2)
-        );
-
-        const opacity = 0.12 + (1 - distanceFromCenter / maxDistance) * 0.28;
-        ctx.fillStyle = `rgba(180, 180, 180, ${opacity})`;
-
-        // Add slight random rotation
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(Math.random() * Math.PI);
-
-        // Draw oval shape
-        ctx.beginPath();
-        ctx.ellipse(0, 0, smudgeWidth, smudgeHeight, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.restore();
-      }
-    }
-
-    // Reset blur
-    ctx.filter = "none";
-
-    // Add white vignette overlay
-    const gradient = ctx.createRadialGradient(
-      centerX,
-      centerY,
-      0,
-      centerX,
-      centerY,
-      maxDistance
-    );
-    gradient.addColorStop(0, "rgba(255, 255, 255, 0)");
-    gradient.addColorStop(0.7, "rgba(255, 255, 255, 0)");
-    gradient.addColorStop(1, "rgba(255, 255, 255, 1)");
-
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-
-    setGeneratedImage(null);
-    setIsGeneratingImage(false);
-  };
-
-  const getDataUrlFromCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Create temporary canvas to combine layers
-    const tempCanvas = document.createElement("canvas");
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    const tempCtx = tempCanvas.getContext("2d");
-
-    if (tempCtx) {
-      // Draw background image first
-      tempCtx.drawImage(canvas, 0, 0);
-
-      // Draw drawing layer on top
-      if (drawingLayerRef.current) {
-        tempCtx.drawImage(drawingLayerRef.current, 0, 0);
-      }
-
-      return tempCanvas.toDataURL("image/png");
-    }
   };
 
   useEffect(() => {
@@ -269,67 +112,13 @@ export default function Home() {
     drawDottedBackground(ctx, width, height);
   }, []);
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    const drawingLayer = drawingLayerRef.current;
-    if (!canvas || !contextRef.current || !drawingLayer) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    contextRef.current.beginPath();
-    contextRef.current.moveTo(x, y);
-
-    const drawingCtx = drawingLayer.getContext("2d");
-    if (drawingCtx) {
-      drawingCtx.beginPath();
-      drawingCtx.strokeStyle = currentColor;
-      drawingCtx.moveTo(x, y);
-    }
-
-    setIsDrawing(true);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (
-      !isDrawing ||
-      !contextRef.current ||
-      !canvasRef.current ||
-      !drawingLayerRef.current
-    )
-      return;
-
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    contextRef.current.lineTo(x, y);
-    contextRef.current.stroke();
-
-    const drawingCtx = drawingLayerRef.current.getContext("2d");
-    if (drawingCtx) {
-      drawingCtx.lineTo(x, y);
-      drawingCtx.stroke();
-    }
-  };
-
-  const stopDrawing = () => {
-    if (!contextRef.current) return;
-    contextRef.current.closePath();
-
-    const drawingCtx = drawingLayerRef.current?.getContext("2d");
-    if (drawingCtx) {
-      drawingCtx.closePath();
-    }
-
-    setIsDrawing(false);
-  };
-
   const handleGenerate = async () => {
     setIsGeneratingImage(true);
 
-    const controlImage = getDataUrlFromCanvas();
+    const controlImage = getDataUrlFromCanvas(
+      canvasRef.current,
+      drawingLayerRef.current
+    );
     const enhancePrompt = `${prompt}, in the style of Pixar animation, 3D realistic, high quality render, cinematic lighting, detailed textures, Ultra HD, playful background`;
 
     try {
@@ -352,17 +141,18 @@ export default function Home() {
       setIsGeneratingImage(false);
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
+      console.error("Error generating image:", errorMessage);
     }
   };
 
   const handleGenerateVideo = async (generatedImageUrl: string) => {
     setIsGeneratingVideo(true);
-    let prompt = "bring the image to life";
+    const prompt = "bring the image to life";
 
     console.log(generatedImageUrl);
     if (!generatedImageUrl) return;
     try {
-      //LETS MAKE THE MODEL AND ASPECT_RATIO DYNAMIC
+      //LETS MAKE THE MODEL AND ASPECT_RATIO DYNAMIC AT SOME POINT
       const result = await fal.subscribe(
         "fal-ai/kling-video/v1.6/standard/image-to-video",
         {
@@ -382,6 +172,7 @@ export default function Home() {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
+      console.error("Error generating video:", errorMessage);
     } finally {
       setIsGeneratingVideo(false);
       setIsGeneratingImage(false);
@@ -513,7 +304,9 @@ export default function Home() {
           <div className="flex justify-between items-center px-6 py-4 relative">
             <button
               className="text-gray-700 hover:bg-gray-100 rounded-full p-2 border-2 border-gray-300 bg-white"
-              onClick={clearCanvas}
+              onClick={() => {
+                clearCanvas(canvasRef.current, drawingLayerRef.current);
+              }}
             >
               <X className="w-5 h-5" />
             </button>
@@ -665,7 +458,7 @@ export default function Home() {
                   />
                   <button
                     className="p-2 bg-white hover:bg-gray-100 transition-colors border-2 border-gray-200 rounded-full"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={triggerFileInput}
                   >
                     <Link2 className="w-5 h-5 text-gray-700" />
                   </button>
